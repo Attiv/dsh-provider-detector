@@ -44,7 +44,17 @@ npm install dsh-provider-detector
 
 ## 使用方法
 
-### 1. 获取 provider 和模型
+### 1. 通过 DSH Web UI
+
+启动 DSH 后打开终端输出的地址，进入：
+
+```text
+设置 → 插件 → Provider Detector
+```
+
+页面会加载当前 providers，勾选要测试的 provider，点击“检测选中的 provider”。结果会显示每个模型的可用状态、耗时、返回文本和错误信息。
+
+### 2. 获取 provider 和模型
 
 ```bash
 curl http://127.0.0.1:3080/api/provider-detector/providers
@@ -52,7 +62,7 @@ curl http://127.0.0.1:3080/api/provider-detector/providers
 
 返回的 `providers` 是对象数组，每个对象包含 `id`、`name` 和 DSH 当前暴露的 `models`。
 
-### 2. 真实检测指定 provider
+### 3. 真实检测指定 provider
 
 检测会对每个模型发起一次最小的 streaming 请求，提示词为“请回答当前时间，只输出当前时间”。因此它验证的是当前配置、网络、鉴权和模型是否真的能响应，而不只是配置文件里是否存在模型。
 
@@ -68,7 +78,7 @@ curl -X POST http://127.0.0.1:3080/api/provider-detector/detect/anthropic \
 
 结果里的 `models[].isAvailable` 表示模型是否成功完成响应，`responseTime` 是耗时，`responseText` 是模型返回的简短文本，`error` 是失败原因。
 
-### 3. 批量检测和缓存
+### 4. 批量检测和缓存
 
 插件提供以下 API 端点：
 
@@ -115,7 +125,7 @@ GET /api/provider-detector/status
 DELETE /api/provider-detector/cache
 ```
 
-### 4. 通过代码
+### 5. 通过代码
 
 ```typescript
 // 在你的插件或代码中
