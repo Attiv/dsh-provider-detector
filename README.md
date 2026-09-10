@@ -30,7 +30,7 @@ npm run build
 
 ```yaml
 plugins:
-  provider-detector:
+  dsh-provider-detector:
     autoDetectOnStartup: false  # 是否在启动时自动检测
     detectionTimeout: 10000     # 检测超时时间（毫秒）
     verbose: false              # 是否启用详细日志
@@ -44,23 +44,33 @@ npm install dsh-provider-detector
 
 ## 使用方法
 
-### 1. 通过 Web UI
-
-1. 启动 DeepSeek Harness: `dsh --profile web`
-2. 打开浏览器访问 DSH Web 界面
-3. 进入 Settings（设置） -> Provider Detector
-4. 点击"检测所有 Providers"按钮
-5. 查看检测结果
-
-### 2. 通过 API
-
-插件提供以下 API 端点：
-
-#### 检测所有 providers
+### 1. 获取 provider 和模型
 
 ```bash
-POST /api/provider-detector/detect-all
+curl http://127.0.0.1:3080/api/provider-detector/providers
 ```
+
+返回的 `providers` 是对象数组，每个对象包含 `id`、`name` 和 DSH 当前暴露的 `models`。
+
+### 2. 真实检测指定 provider
+
+检测会对每个模型发起一次最小的 streaming 请求，提示词为“请回答当前时间，只输出当前时间”。因此它验证的是当前配置、网络、鉴权和模型是否真的能响应，而不只是配置文件里是否存在模型。
+
+```bash
+# 检测一个 provider 的全部模型
+curl -X POST http://127.0.0.1:3080/api/provider-detector/detect/anthropic
+
+# 只检测选中的模型
+curl -X POST http://127.0.0.1:3080/api/provider-detector/detect/anthropic \
+  -H 'content-type: application/json' \
+  -d '{"modelIds":["claude-3-5-sonnet"]}'
+```
+
+结果里的 `models[].isAvailable` 表示模型是否成功完成响应，`responseTime` 是耗时，`responseText` 是模型返回的简短文本，`error` 是失败原因。
+
+### 3. 批量检测和缓存
+
+插件提供以下 API 端点：
 
 响应示例：
 
@@ -87,10 +97,10 @@ POST /api/provider-detector/detect-all
 }
 ```
 
-#### 检测单个 provider
+#### 检测所有 providers
 
 ```bash
-POST /api/provider-detector/detect/:providerId
+curl -X POST http://127.0.0.1:3080/api/provider-detector/detect-all
 ```
 
 #### 获取缓存的状态
@@ -105,7 +115,7 @@ GET /api/provider-detector/status
 DELETE /api/provider-detector/cache
 ```
 
-### 3. 通过代码
+### 4. 通过代码
 
 ```typescript
 // 在你的插件或代码中
@@ -197,10 +207,12 @@ MIT
 - [DSH 插件开发文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/plugin-development.md)
 - [项目 GitHub 仓库](https://github.com/Attiv/dsh-provider-detector)
 
-## 已知问题
+## 当前实现说明
 
-- 目前需要根据实际的 DSH API 实现 provider 和模型的获取逻辑
-- 模型测试功能需要完善（TODO 部分）
+- provider 和模型来自 DSH `ctx.llm.listProviders()` / `ctx.llm.listModels()`。
+- 检测通过 DSH `ctx.llm.stream()` 发起真实请求。
+- DSH Web profile 目前使用 `webServer.register()` 路由；插件需要注入 `llm` 和 `webServer`。
+- 没有配置 provider 或模型时，接口返回空数组是正常现象。
 
 ## 贡献
 

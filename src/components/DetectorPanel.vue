@@ -34,15 +34,15 @@
         <div class="provider-checkbox-list">
           <label 
             v-for="provider in availableProviders" 
-            :key="provider"
+            :key="provider.id"
             class="provider-checkbox"
           >
             <input 
               type="checkbox" 
-              :value="provider"
+              :value="provider.id"
               v-model="selectedProviders"
             />
-            <span>{{ provider }}</span>
+            <span>{{ provider.name }} ({{ provider.models.length }} 个模型)</span>
           </label>
         </div>
       </div>
@@ -156,6 +156,12 @@
                 <span v-if="model.responseTime" class="response-time">
                   {{ model.responseTime }}ms
                 </span>
+                <span v-if="model.responseText" class="response-text">
+                  {{ model.responseText }}
+                </span>
+                <span v-if="model.usage?.totalTokens" class="usage">
+                  {{ model.usage.totalTokens }} tokens
+                </span>
                 <span v-if="model.error" class="model-error">
                   {{ model.error }}
                 </span>
@@ -180,6 +186,20 @@ interface ModelStatus {
   modelName: string;
   isAvailable: boolean;
   responseTime?: number;
+  responseText?: string;
+  finishKind?: string;
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+  };
+  error?: string;
+}
+
+interface ProviderInfo {
+  id: string;
+  name: string;
+  models: Array<{ id: string; name: string }>;
   error?: string;
 }
 
@@ -192,7 +212,7 @@ interface ProviderStatus {
   error?: string;
 }
 
-const availableProviders = ref<string[]>([]);
+const availableProviders = ref<ProviderInfo[]>([]);
 const selectedProviders = ref<string[]>([]);
 const results = ref<ProviderStatus[]>([]);
 const isDetecting = ref(false);
@@ -234,11 +254,13 @@ async function loadProviders() {
     }
     
     const data = await response.json();
-    availableProviders.value = data.providers || [];
+    availableProviders.value = Array.isArray(data.providers)
+      ? data.providers
+      : (data.providerIds || []).map((id: string) => ({ id, name: id, models: [] }));
     
     // 默认全选
     if (selectedProviders.value.length === 0 && availableProviders.value.length > 0) {
-      selectedProviders.value = [...availableProviders.value];
+      selectedProviders.value = availableProviders.value.map((provider) => provider.id);
     }
     
   } catch (e) {
@@ -253,7 +275,7 @@ function toggleSelectAll() {
   if (allSelected.value) {
     selectedProviders.value = [];
   } else {
-    selectedProviders.value = [...availableProviders.value];
+    selectedProviders.value = availableProviders.value.map((provider) => provider.id);
   }
 }
 
@@ -273,7 +295,7 @@ async function detectSelected() {
     for (const providerId of selectedProviders.value) {
       currentDetecting.value++;
       
-      const response = await fetch(`/api/provider-detector/detect/${providerId}`, {
+      const response = await fetch(`/api/provider-detector/detect/${encodeURIComponent(providerId)}`, {
         method: 'POST',
       });
       

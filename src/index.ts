@@ -1,15 +1,32 @@
 import { Context } from '@deepseek-ai/cordis';
 import { registerRoutes } from './routes';
+import {
+  AdvertisedModel,
+  probeModel,
+  ProbeModelResult,
+  selectModels,
+  StreamUsage,
+} from './detection';
 
 export const name = 'provider-detector';
+export const inject = ['llm', 'webServer'];
 
 export interface Config {
-  /** 是否在启动时自动检测所有 providers */
   autoDetectOnStartup?: boolean;
-  /** 检测超时时间（毫秒） */
   detectionTimeout?: number;
-  /** 是否启用详细日志 */
   verbose?: boolean;
+}
+
+export interface ModelInfo extends AdvertisedModel {
+  id: string;
+  name: string;
+}
+
+export interface ProviderInfo {
+  id: string;
+  name: string;
+  models: ModelInfo[];
+  error?: string;
 }
 
 export interface ProviderStatus {
@@ -21,12 +38,14 @@ export interface ProviderStatus {
   error?: string;
 }
 
-export interface ModelStatus {
-  modelId: string;
-  modelName: string;
-  isAvailable: boolean;
-  responseTime?: number;
-  error?: string;
+export interface ModelStatus extends ProbeModelResult {
+  usage?: StreamUsage;
+}
+
+interface LlmService {
+  listProviders?: () => Array<{ id: string; name?: string }>;
+  listModels?: (provider: string) => Promise<unknown[]>;
+  stream?: (options: Record<string, unknown>) => AsyncIterable<any>;
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -35,50 +54,73 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
+function messageFrom(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function normalizeModels(providerId: string, models: unknown[]): ModelInfo[] {
+  return models
+    .map((model): ModelInfo | undefined => {
+      if (typeof model === 'string') {
+        return { id: model, name: model, provider: providerId };
+      }
+      if (!model || typeof model !== 'object') return undefined;
+
+      const candidate = model as Record<string, unknown>;
+      const id = typeof candidate.id === 'string' ? candidate.id : undefined;
+      if (!id) return undefined;
+      const name = typeof candidate.name === 'string' ? candidate.name : id;
+      return { ...candidate, id, name, provider: providerId } as ModelInfo;
+    })
+    .filter((model): model is ModelInfo => Boolean(model));
+}
+
 export class ProviderDetectorService {
-  private ctx: Context;
-  private config: Config;
-  private statusCache: Map<string, ProviderStatus> = new Map();
+  private readonly ctx: Context;
+  private readonly config: Required<Config>;
+  private readonly statusCache = new Map<string, ProviderStatus>();
 
-  constructor(ctx: Context, config: Config) {
+  constructor(ctx: Context, config: Config = {}) {
     this.ctx = ctx;
-    this.config = config;
+    this.config = {
+      autoDetectOnStartup: config.autoDetectOnStartup ?? false,
+      detectionTimeout: config.detectionTimeout ?? 10000,
+      verbose: config.verbose ?? false,
+    };
   }
 
-  /**
-   * 获取所有可用的 providers
-   */
-  async getAllProviders(): Promise<string[]> {
-    try {
-      // 从 llm 服务获取所有注册的 providers
-      const llmService = (this.ctx as any).llm;
-      if (!llmService) {
-        throw new Error('LLM service not available');
-      }
-
-      // 获取所有配置的 providers
-      const providers: string[] = [];
-      
-      // 这里需要根据实际的 DSH API 来获取 providers
-      // 暂时返回一个示例列表
-      if (this.config.verbose) {
-        this.ctx.logger?.info('Fetching all providers from LLM service');
-      }
-
-      // TODO: 实现实际的 provider 获取逻辑
-      // 可能需要访问 ctx.llm.providers 或类似的 API
-      
-      return providers;
-    } catch (error) {
-      this.ctx.logger?.error('Failed to get all providers:', error);
-      return [];
-    }
+  private getLlm(): LlmService {
+    const llmService = (this.ctx as any).llm as LlmService | undefined;
+    if (!llmService) throw new Error('LLM service not available');
+    return llmService;
   }
 
-  /**
-   * 检测单个 provider 的状态
-   */
-  async detectProvider(providerId: string): Promise<ProviderStatus> {
+  async getAllProviders(): Promise<ProviderInfo[]> {
+    const llm = this.getLlm();
+    if (!llm.listProviders) throw new Error('LLM service does not expose listProviders()');
+    if (!llm.listModels) throw new Error('LLM service does not expose listModels()');
+
+    const providers = llm.listProviders();
+    return Promise.all(providers.map(async (provider) => {
+      const info: ProviderInfo = {
+        id: provider.id,
+        name: provider.name || provider.id,
+        models: [],
+      };
+
+      try {
+        if (this.config.verbose) this.ctx.logger?.info(`Fetching models for provider: ${provider.id}`);
+        info.models = normalizeModels(provider.id, await llm.listModels!(provider.id));
+      } catch (error) {
+        info.error = messageFrom(error);
+        this.ctx.logger?.warn(`Failed to get models for provider ${provider.id}:`, error);
+      }
+
+      return info;
+    }));
+  }
+
+  async detectProvider(providerId: string, modelIds?: string[]): Promise<ProviderStatus> {
     const status: ProviderStatus = {
       providerId,
       providerName: providerId,
@@ -88,178 +130,77 @@ export class ProviderDetectorService {
     };
 
     try {
-      if (this.config.verbose) {
-        this.ctx.logger?.info(`Detecting provider: ${providerId}`);
+      const llm = this.getLlm();
+      if (!llm.listProviders || !llm.listModels || !llm.stream) {
+        throw new Error('LLM service does not expose the provider/model/stream APIs');
       }
 
-      // 获取该 provider 的所有模型
-      const models = await this.getProviderModels(providerId);
-      
-      // 测试每个模型
-      for (const modelId of models) {
-        const modelStatus = await this.testModel(providerId, modelId);
+      const provider = llm.listProviders().find((item) => item.id === providerId);
+      if (!provider) throw new Error(`Unknown provider: ${providerId}`);
+      status.providerName = provider.name || provider.id;
+
+      const models = selectModels(
+        normalizeModels(providerId, await llm.listModels(providerId)),
+        modelIds,
+      );
+
+      for (const model of models) {
+        const modelStatus = await probeModel({
+          providerId,
+          model,
+          timeoutMs: this.config.detectionTimeout,
+          stream: (options) => llm.stream!({ ...options }),
+        });
         status.models.push(modelStatus);
       }
 
-      // 如果至少有一个模型可用，则认为 provider 可用
-      status.isAvailable = status.models.some(m => m.isAvailable);
-
+      status.isAvailable = status.models.some((model) => model.isAvailable);
     } catch (error) {
-      status.error = error instanceof Error ? error.message : String(error);
+      status.error = messageFrom(error);
       this.ctx.logger?.error(`Failed to detect provider ${providerId}:`, error);
     }
 
-    // 缓存状态
     this.statusCache.set(providerId, status);
-
     return status;
   }
 
-  /**
-   * 检测所有 providers
-   */
   async detectAll(): Promise<ProviderStatus[]> {
     const providers = await this.getAllProviders();
     const results: ProviderStatus[] = [];
-
-    for (const providerId of providers) {
-      const status = await this.detectProvider(providerId);
-      results.push(status);
+    for (const provider of providers) {
+      results.push(await this.detectProvider(provider.id));
     }
-
     return results;
   }
 
-  /**
-   * 获取 provider 的所有模型
-   */
-  private async getProviderModels(providerId: string): Promise<string[]> {
-    try {
-      // TODO: 实现实际的模型获取逻辑
-      // 可能需要访问 ctx.llm.getModels(providerId) 或类似的 API
-      
-      if (this.config.verbose) {
-        this.ctx.logger?.info(`Fetching models for provider: ${providerId}`);
-      }
-
-      return [];
-    } catch (error) {
-      this.ctx.logger?.error(`Failed to get models for provider ${providerId}:`, error);
-      return [];
-    }
-  }
-
-  /**
-   * 测试单个模型
-   */
-  private async testModel(providerId: string, modelId: string): Promise<ModelStatus> {
-    const startTime = Date.now();
-    const status: ModelStatus = {
-      modelId,
-      modelName: modelId,
-      isAvailable: false,
-    };
-
-    try {
-      if (this.config.verbose) {
-        this.ctx.logger?.info(`Testing model: ${providerId}:${modelId}`);
-      }
-
-      // 创建一个简单的测试请求
-      let timeoutId: NodeJS.Timeout | undefined;
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => {
-          reject(new Error('Timeout'));
-        }, this.config.detectionTimeout);
-      });
-
-      try {
-        // TODO: 实现实际的模型测试逻辑
-        // 可能需要调用 ctx.llm.chat() 或类似的 API
-        
-        // 示例：发送一个简单的测试消息
-        // const response = await ctx.llm.chat({
-        //   model: `${providerId}:${modelId}`,
-        //   messages: [{ role: 'user', content: 'test' }],
-        // });
-
-        await Promise.race([
-          // 实际测试逻辑
-          Promise.resolve(),
-          timeoutPromise
-        ]);
-
-        if (timeoutId) clearTimeout(timeoutId);
-        
-        status.isAvailable = true;
-        status.responseTime = Date.now() - startTime;
-
-      } catch (error) {
-        if (timeoutId) clearTimeout(timeoutId);
-        throw error;
-      }
-
-    } catch (error) {
-      status.error = error instanceof Error ? error.message : String(error);
-      if (this.config.verbose) {
-        this.ctx.logger?.warn(`Model test failed: ${providerId}:${modelId}`, error);
-      }
-    }
-
-    return status;
-  }
-
-  /**
-   * 获取缓存的状态
-   */
   getCachedStatus(providerId: string): ProviderStatus | undefined {
     return this.statusCache.get(providerId);
   }
 
-  /**
-   * 获取所有缓存的状态
-   */
   getAllCachedStatus(): ProviderStatus[] {
     return Array.from(this.statusCache.values());
   }
 
-  /**
-   * 清除缓存
-   */
   clearCache(): void {
     this.statusCache.clear();
   }
+
+  getConfig(): Required<Config> {
+    return this.config;
+  }
 }
 
-export function apply(ctx: Context, config: Config) {
-  // 设置默认值
-  const finalConfig = {
-    autoDetectOnStartup: config.autoDetectOnStartup ?? false,
-    detectionTimeout: config.detectionTimeout ?? 10000,
-    verbose: config.verbose ?? false,
-  };
-
-  // 创建服务实例
-  const service = new ProviderDetectorService(ctx, finalConfig);
-  ctx.providerDetector = service;
-
-  // 注册 API 路由
+export function apply(ctx: Context, config: Config = {}) {
+  const service = new ProviderDetectorService(ctx, config);
+  ctx.provide('providerDetector', service);
   registerRoutes(ctx);
-
-  // 注册日志
   ctx.logger?.info('Provider Detector plugin loaded');
 
-  // 如果配置了自动检测，则在启动时执行
-  if (finalConfig.autoDetectOnStartup) {
-    // 延迟执行，等待系统就绪
+  if (service.getConfig().autoDetectOnStartup) {
     setTimeout(async () => {
-      ctx.logger?.info('Starting automatic provider detection...');
       try {
         const results = await service.detectAll();
         ctx.logger?.info(`Detection completed. Found ${results.length} providers.`);
-        
-        const availableCount = results.filter(r => r.isAvailable).length;
-        ctx.logger?.info(`Available providers: ${availableCount}/${results.length}`);
       } catch (error) {
         ctx.logger?.error('Automatic detection failed:', error);
       }
