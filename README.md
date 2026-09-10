@@ -1,6 +1,11 @@
 # DSH Provider Detector
 
-DeepSeek Harness 的 Provider 和模型检测插件。
+[![GitHub stars](https://img.shields.io/github/stars/Attiv/dsh-provider-detector?style=social)](https://github.com/Attiv/dsh-provider-detector)
+[![GitHub license](https://img.shields.io/github/license/Attiv/dsh-provider-detector)](https://github.com/Attiv/dsh-provider-detector/blob/main/LICENSE)
+
+DeepSeek Harness 的 Provider 和模型检测插件 - 支持选择性检测和批量测试。
+
+> 🔗 **GitHub**: https://github.com/Attiv/dsh-provider-detector
 
 ## 功能特性
 
@@ -190,17 +195,36 @@ MIT
 
 - [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
 - [DSH 插件开发文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/plugin-development.md)
+- [项目 GitHub 仓库](https://github.com/Attiv/dsh-provider-detector)
 
 ## 已知问题
 
 - 目前需要根据实际的 DSH API 实现 provider 和模型的获取逻辑
 - 模型测试功能需要完善（TODO 部分）
 
+## 贡献
+
+欢迎贡献！请查看 [CONTRIBUTING.md](CONTRIBUTING.md) 了解如何参与。
+
 ## 更新日志
 
 ### 0.1.0 (2025-01-15)
 
 - 初始版本
-- 基础的 provider 检测功能
-- Web UI 界面
-- API 端点
+- 选择性 provider 检测功能
+- 批量检测支持
+- Web UI 界面（Vue 组件）
+- RESTful API 端点
+- 完整文档
+
+## 许可证
+
+MIT License - 查看 [LICENSE](LICENSE) 文件了解详情
+
+## 作者
+
+Created by [@Attiv](https://github.com/Attiv)
+
+---
+
+⭐ 如果这个项目对你有帮助，请给个 Star！
