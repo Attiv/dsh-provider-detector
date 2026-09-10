@@ -1,0 +1,35 @@
+{
+  "name": "dsh-provider-detector",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness plugin for detecting and testing available models across providers",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "model-detection",
+    "provider-probe"
+  ],
+  "author": "",
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@types/node": "^22.20.2",
+    "typescript": "^5.0.0"
+  },
+  "cordis": {
+    "description": "Provider and model detection plugin",
+    "service": {
+      "required": [
+        "llm"
+      ]
+    }
+  }
+}

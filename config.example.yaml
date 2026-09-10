@@ -1,0 +1,35 @@
+# DSH Provider Detector 配置示例
+
+# 将以下配置添加到你的 DeepSeek Harness 配置文件中
+# 通常位于 ~/.config/dsh/config.yaml
+
+plugins:
+  # Provider Detector 插件配置
+  provider-detector:
+    # 是否在启动时自动检测所有 providers
+    # 设为 true 时，DSH 启动后会自动检测所有配置的 providers
+    autoDetectOnStartup: false
+    
+    # 检测超时时间（毫秒）
+    # 每个模型测试请求的超时时间
+    detectionTimeout: 10000
+    
+    # 是否启用详细日志
+    # 设为 true 时会输出详细的检测过程日志
+    verbose: false
+
+# 使用示例 1: 基础配置
+# plugins:
+#   provider-detector: {}
+
+# 使用示例 2: 启用自动检测
+# plugins:
+#   provider-detector:
+#     autoDetectOnStartup: true
+#     verbose: true
+
+# 使用示例 3: 自定义超时
+# plugins:
+#   provider-detector:
+#     detectionTimeout: 5000
+#     verbose: false
