@@ -43,6 +43,7 @@ test('client bundle registers a Provider Detector tab in DSH Settings', () => {
   });
 
   assert.equal(plugin.name, 'dsh-provider-detector');
+  assert.equal(plugin.inject, undefined);
   assert.equal(registration.options.id, 'provider-detector');
   assert.equal(registration.options.name, 'settings.plugins.tab');
   assert.equal(registration.options.label, 'Provider Detector');

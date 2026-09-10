@@ -148,7 +148,6 @@ window.__ModuleLoader__.load({
     }
 
     exports.name = 'dsh-provider-detector';
-    exports.inject = ['@deepseek-ai/dsh-client-runtime', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-slots'];
     exports.apply = apply;
     return module.exports;
   },
