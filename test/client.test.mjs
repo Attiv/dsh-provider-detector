@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-test('client bundle registers a Provider Detector tab in DSH Settings', () => {
+test('client bundle registers Provider Detector as a first-level Settings section', () => {
   let plugin;
   const fakeDocument = {
     getElementById() { return null; },
@@ -29,7 +29,7 @@ test('client bundle registers a Provider Detector tab in DSH Settings', () => {
   let registration;
   const slots = {
     inject(name, callback) {
-      assert.equal(name, 'settings.plugins.tab');
+      assert.equal(name, 'settings.section');
       registration = callback();
     },
     register(options, component) {
@@ -43,8 +43,8 @@ test('client bundle registers a Provider Detector tab in DSH Settings', () => {
   });
 
   assert.equal(plugin.name, 'dsh-provider-detector');
-  assert.equal(plugin.inject, undefined);
+  assert.deepEqual(Array.from(plugin.inject), ['slots']);
   assert.equal(registration.options.id, 'provider-detector');
-  assert.equal(registration.options.name, 'settings.plugins.tab');
-  assert.equal(registration.options.label, 'Provider Detector');
+  assert.equal(registration.options.name, 'settings.section');
+  assert.equal(registration.options.label, 'Provider 检测');
 });

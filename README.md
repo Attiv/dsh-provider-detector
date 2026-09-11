@@ -49,7 +49,7 @@ npm install dsh-provider-detector
 启动 DSH 后打开终端输出的地址，进入：
 
 ```text
-设置 → 插件 → Provider Detector
+设置 → Provider 检测
 ```
 
 页面会加载当前 providers，勾选要测试的 provider，点击“检测选中的 provider”。结果会显示每个模型的可用状态、耗时、返回文本和错误信息。

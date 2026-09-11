@@ -141,13 +141,14 @@ window.__ModuleLoader__.load({
       if (!slots) return;
       const cleanupStyle = installStyle();
       ctx.effect(() => cleanupStyle, 'provider-detector client styles');
-      slots.inject('settings.plugins.tab', () => slots.register(
-        { name: 'settings.plugins.tab', id: 'provider-detector', order: 90, label: 'Provider Detector' },
+      slots.inject('settings.section', () => slots.register(
+        { name: 'settings.section', id: 'provider-detector', order: 45, label: 'Provider 检测' },
         () => el(DetectorPanel)
       ));
     }
 
     exports.name = 'dsh-provider-detector';
+    exports.inject = ['slots'];
     exports.apply = apply;
     return module.exports;
   },
